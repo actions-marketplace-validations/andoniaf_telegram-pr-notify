@@ -138,8 +138,8 @@ func TestRenderReviewCommented(t *testing.T) {
 		t.Fatalf("Render() error: %v", err)
 	}
 
-	if !strings.Contains(result, "Review Comment") {
-		t.Errorf("result missing 'Review Comment':\n%s", result)
+	if !strings.Contains(result, "Review Submitted") {
+		t.Errorf("result missing 'Review Submitted':\n%s", result)
 	}
 	if !strings.Contains(result, "Looks interesting") {
 		t.Errorf("result missing review body:\n%s", result)
