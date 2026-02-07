@@ -8,15 +8,20 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const apiBase = "https://api.telegram.org"
 
+const telegramMaxMessageLength = 4096
+const truncationMarker = "\n\n[message truncated]"
+
 type Client struct {
-	botToken string
-	chatID   string
-	topicID  string
-	apiURL   string
+	botToken   string
+	chatID     string
+	topicID    string
+	apiURL     string
+	httpClient *http.Client
 }
 
 type sendMessageRequest struct {
@@ -49,11 +54,26 @@ func NewClient(botToken, chatID, topicID string) *Client {
 		chatID:   chatID,
 		topicID:  topicID,
 		apiURL:   apiBase,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
+}
+
+// WithHTTPClient sets a custom http.Client, useful for testing.
+func (c *Client) WithHTTPClient(hc *http.Client) *Client {
+	c.httpClient = hc
+	return c
 }
 
 // SendMessage sends an HTML message with an optional inline keyboard button.
 func (c *Client) SendMessage(text, buttonText, buttonURL string) error {
+	if len([]rune(text)) > telegramMaxMessageLength {
+		runes := []rune(text)
+		maxLen := telegramMaxMessageLength - len([]rune(truncationMarker))
+		text = string(runes[:maxLen]) + truncationMarker
+	}
+
 	req := sendMessageRequest{
 		ChatID:                c.chatID,
 		Text:                  text,
@@ -83,7 +103,7 @@ func (c *Client) SendMessage(text, buttonText, buttonURL string) error {
 	}
 
 	url := fmt.Sprintf("%s/bot%s/sendMessage", c.apiURL, c.botToken)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("sending request to Telegram API: %w", sanitizeErr(err, c.botToken))
 	}

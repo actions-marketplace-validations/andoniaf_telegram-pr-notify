@@ -86,7 +86,7 @@ func TestRenderDefaultClosed(t *testing.T) {
 func TestRenderReviewApproved(t *testing.T) {
 	data := samplePRData()
 	data.EventName = "pull_request_review"
-	data.Action = "submitted"
+	data.Action = "approved"
 	data.Review = events.Review{
 		State: "approved",
 		Body:  "LGTM!",
@@ -108,7 +108,7 @@ func TestRenderReviewApproved(t *testing.T) {
 func TestRenderReviewChangesRequested(t *testing.T) {
 	data := samplePRData()
 	data.EventName = "pull_request_review"
-	data.Action = "submitted"
+	data.Action = "changes_requested"
 	data.Review = events.Review{
 		State: "changes_requested",
 		Body:  "Please fix the tests",
@@ -121,6 +121,62 @@ func TestRenderReviewChangesRequested(t *testing.T) {
 
 	if !strings.Contains(result, "Changes Requested") {
 		t.Errorf("result missing 'Changes Requested':\n%s", result)
+	}
+}
+
+func TestRenderReviewCommented(t *testing.T) {
+	data := samplePRData()
+	data.EventName = "pull_request_review"
+	data.Action = "commented"
+	data.Review = events.Review{
+		State: "commented",
+		Body:  "Looks interesting, a few thoughts...",
+	}
+
+	result, err := Render(data, "")
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+
+	if !strings.Contains(result, "Review Comment") {
+		t.Errorf("result missing 'Review Comment':\n%s", result)
+	}
+	if !strings.Contains(result, "Looks interesting") {
+		t.Errorf("result missing review body:\n%s", result)
+	}
+}
+
+func TestRenderAllPRActions(t *testing.T) {
+	tests := []struct {
+		action   string
+		contains string
+	}{
+		{"reopened", "Reopened"},
+		{"synchronize", "Updated"},
+		{"ready_for_review", "Ready for Review"},
+		{"converted_to_draft", "Converted to Draft"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			data := samplePRData()
+			data.Action = tt.action
+
+			result, err := Render(data, "")
+			if err != nil {
+				t.Fatalf("Render() error: %v", err)
+			}
+
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("result missing %q:\n%s", tt.contains, result)
+			}
+			if !strings.Contains(result, "#42") {
+				t.Errorf("result missing PR number:\n%s", result)
+			}
+			if !strings.Contains(result, "octocat") {
+				t.Errorf("result missing actor:\n%s", result)
+			}
+		})
 	}
 }
 
@@ -175,7 +231,7 @@ func TestRenderNoTemplateForEvent(t *testing.T) {
 func TestRenderTruncate(t *testing.T) {
 	data := samplePRData()
 	data.EventName = "pull_request_review"
-	data.Action = "submitted"
+	data.Action = "approved"
 	data.Review = events.Review{
 		State: "approved",
 		Body:  strings.Repeat("a", 600),
@@ -186,8 +242,14 @@ func TestRenderTruncate(t *testing.T) {
 		t.Fatalf("Render() error: %v", err)
 	}
 
-	if len(result) > 1000 && !strings.Contains(result, "...") {
-		t.Error("expected truncation with '...' for long review body")
+	if strings.Contains(result, strings.Repeat("a", 600)) {
+		t.Error("expected body to be truncated, but full 600-char string is present")
+	}
+	if !strings.Contains(result, "...") {
+		t.Error("expected truncation marker '...'")
+	}
+	if !strings.Contains(result, strings.Repeat("a", 500)) {
+		t.Error("expected at least 500 chars of body to be preserved")
 	}
 }
 

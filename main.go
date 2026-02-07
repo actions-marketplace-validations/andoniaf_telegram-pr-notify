@@ -13,6 +13,14 @@ import (
 var chatIDPattern = regexp.MustCompile(`^-?\d+$`)
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "::error::%v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Notification sent successfully")
+}
+
+func run() error {
 	botToken := os.Getenv("INPUT_BOT_TOKEN")
 	chatID := os.Getenv("INPUT_CHAT_ID")
 	topicID := os.Getenv("INPUT_TOPIC_ID")
@@ -24,37 +32,32 @@ func main() {
 	}
 
 	if botToken == "" {
-		fatal("bot_token is required")
+		return fmt.Errorf("bot_token is required")
 	}
 	if chatID == "" {
-		fatal("chat_id is required")
+		return fmt.Errorf("chat_id is required")
 	}
 	if !chatIDPattern.MatchString(chatID) {
-		fatal("chat_id must be a numeric value (e.g., -100123456789)")
+		return fmt.Errorf("chat_id must be a numeric value (e.g., -100123456789)")
 	}
 	if eventPayload == "" {
-		fatal("event_payload is required")
+		return fmt.Errorf("event_payload is required")
 	}
 
 	data, err := events.Parse([]byte(eventPayload))
 	if err != nil {
-		fatal("parsing event: %v", err)
+		return fmt.Errorf("parsing event: %w", err)
 	}
 
 	message, err := templates.Render(data, customTemplate)
 	if err != nil {
-		fatal("rendering template: %v", err)
+		return fmt.Errorf("rendering template: %w", err)
 	}
 
 	client := telegram.NewClient(botToken, chatID, topicID)
 	if err := client.SendMessage(message, data.ButtonText(), data.RelevantURL()); err != nil {
-		fatal("sending message: %v", err)
+		return fmt.Errorf("sending message: %w", err)
 	}
 
-	fmt.Println("Notification sent successfully")
-}
-
-func fatal(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "::error::"+format+"\n", args...)
-	os.Exit(1)
+	return nil
 }
