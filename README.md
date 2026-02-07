@@ -12,6 +12,8 @@ A GitHub Action that sends Telegram notifications for Pull Request events. Built
 - Inline keyboard button linking to the PR/review/comment
 - Minimal Docker image (distroless)
 
+![](./telegram-pr-notify.png)
+
 ## Inputs
 
 | Input | Required | Default | Description |
