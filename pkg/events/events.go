@@ -7,11 +7,8 @@ import (
 
 // GitHubContext represents the top-level structure of toJSON(github).
 type GitHubContext struct {
-	EventName  string          `json:"event_name"`
-	Actor      string          `json:"actor"`
-	Repository string          `json:"repository"`
-	ServerURL  string          `json:"server_url"`
-	Event      json.RawMessage `json:"event"`
+	EventName string          `json:"event_name"`
+	Event     json.RawMessage `json:"event"`
 }
 
 type User struct {
@@ -162,9 +159,15 @@ func parseReview(raw json.RawMessage) (*TemplateData, error) {
 	if err := json.Unmarshal(raw, &e); err != nil {
 		return nil, fmt.Errorf("parsing pull_request_review event: %w", err)
 	}
+
+	action := e.Action
+	if action == "submitted" {
+		action = e.Review.State
+	}
+
 	return &TemplateData{
 		EventName: "pull_request_review",
-		Action:    e.Action,
+		Action:    action,
 		Actor:     e.Sender,
 		Repo:      e.Repository,
 		PR:        e.PullRequest,

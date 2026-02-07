@@ -5,8 +5,18 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func newTestClient(serverURL string) *Client {
+	return &Client{
+		botToken:   "test-token",
+		chatID:     "-100123",
+		apiURL:     serverURL,
+		httpClient: &http.Client{},
+	}
+}
 
 func TestSendMessageSuccess(t *testing.T) {
 	var received sendMessageRequest
@@ -19,11 +29,7 @@ func TestSendMessageSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{
-		botToken: "test-token",
-		chatID:   "-100123",
-		apiURL:   server.URL,
-	}
+	client := newTestClient(server.URL)
 
 	err := client.SendMessage("Hello", "View PR", "https://github.com/pr/1")
 	if err != nil {
@@ -71,12 +77,8 @@ func TestSendMessageWithTopicID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{
-		botToken: "test-token",
-		chatID:   "-100123",
-		topicID:  "456",
-		apiURL:   server.URL,
-	}
+	client := newTestClient(server.URL)
+	client.topicID = "456"
 
 	err := client.SendMessage("Hello", "", "")
 	if err != nil {
@@ -101,11 +103,8 @@ func TestSendMessageAPIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{
-		botToken: "test-token",
-		chatID:   "invalid",
-		apiURL:   server.URL,
-	}
+	client := newTestClient(server.URL)
+	client.chatID = "invalid"
 
 	err := client.SendMessage("Hello", "", "")
 	if err == nil {
@@ -120,10 +119,11 @@ func TestSendMessageAPIError(t *testing.T) {
 
 func TestSendMessageInvalidTopicID(t *testing.T) {
 	client := &Client{
-		botToken: "test-token",
-		chatID:   "-100123",
-		topicID:  "not-a-number",
-		apiURL:   "http://localhost",
+		botToken:   "test-token",
+		chatID:     "-100123",
+		topicID:    "not-a-number",
+		apiURL:     "http://localhost",
+		httpClient: &http.Client{},
 	}
 
 	err := client.SendMessage("Hello", "", "")
@@ -142,11 +142,8 @@ func TestSendMessageRequestPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &Client{
-		botToken: "my-secret-token",
-		chatID:   "-100123",
-		apiURL:   server.URL,
-	}
+	client := newTestClient(server.URL)
+	client.botToken = "my-secret-token"
 
 	err := client.SendMessage("Hello", "", "")
 	if err != nil {
@@ -156,5 +153,65 @@ func TestSendMessageRequestPath(t *testing.T) {
 	expected := "/botmy-secret-token/sendMessage"
 	if requestPath != expected {
 		t.Errorf("request path = %q, want %q", requestPath, expected)
+	}
+}
+
+func TestSendMessageTruncatesLongText(t *testing.T) {
+	var received sendMessageRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &received)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok": true}`))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL)
+
+	longText := strings.Repeat("x", 5000)
+	err := client.SendMessage(longText, "", "")
+	if err != nil {
+		t.Fatalf("SendMessage() error: %v", err)
+	}
+
+	runes := []rune(received.Text)
+	if len(runes) > telegramMaxMessageLength {
+		t.Errorf("message length = %d runes, want <= %d", len(runes), telegramMaxMessageLength)
+	}
+	if !strings.HasSuffix(received.Text, truncationMarker) {
+		t.Errorf("truncated message should end with %q", truncationMarker)
+	}
+}
+
+func TestSendMessageDoesNotTruncateShortText(t *testing.T) {
+	var received sendMessageRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &received)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok": true}`))
+	}))
+	defer server.Close()
+
+	client := newTestClient(server.URL)
+
+	shortText := "Hello, World!"
+	err := client.SendMessage(shortText, "", "")
+	if err != nil {
+		t.Fatalf("SendMessage() error: %v", err)
+	}
+
+	if received.Text != shortText {
+		t.Errorf("Text = %q, want %q", received.Text, shortText)
+	}
+}
+
+func TestWithHTTPClient(t *testing.T) {
+	customClient := &http.Client{}
+	client := NewClient("token", "chat", "").WithHTTPClient(customClient)
+	if client.httpClient != customClient {
+		t.Error("WithHTTPClient did not set the custom http client")
 	}
 }

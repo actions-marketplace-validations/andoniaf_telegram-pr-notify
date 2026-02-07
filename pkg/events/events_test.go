@@ -5,109 +5,174 @@ import (
 	"testing"
 )
 
-func TestParsePullRequestOpened(t *testing.T) {
-	payload, err := os.ReadFile("../../testdata/pull_request_opened.json")
-	if err != nil {
-		t.Fatalf("reading testdata: %v", err)
+func TestParse(t *testing.T) {
+	tests := []struct {
+		name       string
+		fixture    string
+		wantEvent  string
+		wantAction string
+		check      func(t *testing.T, data *TemplateData)
+	}{
+		{
+			name:       "pull_request opened",
+			fixture:    "../../testdata/pull_request_opened.json",
+			wantEvent:  "pull_request",
+			wantAction: "opened",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.PR.Number != 42 {
+					t.Errorf("PR.Number = %d, want 42", data.PR.Number)
+				}
+				if data.PR.Title != "Add new feature" {
+					t.Errorf("PR.Title = %q, want %q", data.PR.Title, "Add new feature")
+				}
+				if data.Actor.Login != "octocat" {
+					t.Errorf("Actor.Login = %q, want %q", data.Actor.Login, "octocat")
+				}
+				if data.Repo.FullName != "octocat/Hello-World" {
+					t.Errorf("Repo.FullName = %q, want %q", data.Repo.FullName, "octocat/Hello-World")
+				}
+				if data.PR.Head.Ref != "feature-branch" {
+					t.Errorf("PR.Head.Ref = %q, want %q", data.PR.Head.Ref, "feature-branch")
+				}
+				if data.PR.Base.Ref != "main" {
+					t.Errorf("PR.Base.Ref = %q, want %q", data.PR.Base.Ref, "main")
+				}
+			},
+		},
+		{
+			name:       "pull_request closed (not merged)",
+			fixture:    "../../testdata/pull_request_closed.json",
+			wantEvent:  "pull_request",
+			wantAction: "closed",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.IsMerged() {
+					t.Error("IsMerged() = true, want false")
+				}
+			},
+		},
+		{
+			name:       "pull_request closed merged",
+			fixture:    "../../testdata/pull_request_closed_merged.json",
+			wantEvent:  "pull_request",
+			wantAction: "closed",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if !data.IsMerged() {
+					t.Error("IsMerged() = false, want true")
+				}
+			},
+		},
+		{
+			name:       "pull_request reopened",
+			fixture:    "../../testdata/pull_request_reopened.json",
+			wantEvent:  "pull_request",
+			wantAction: "reopened",
+		},
+		{
+			name:       "pull_request synchronize",
+			fixture:    "../../testdata/pull_request_synchronize.json",
+			wantEvent:  "pull_request",
+			wantAction: "synchronize",
+		},
+		{
+			name:       "pull_request ready_for_review",
+			fixture:    "../../testdata/pull_request_ready_for_review.json",
+			wantEvent:  "pull_request",
+			wantAction: "ready_for_review",
+		},
+		{
+			name:       "pull_request converted_to_draft",
+			fixture:    "../../testdata/pull_request_converted_to_draft.json",
+			wantEvent:  "pull_request",
+			wantAction: "converted_to_draft",
+		},
+		{
+			name:       "review approved",
+			fixture:    "../../testdata/pull_request_review_approved.json",
+			wantEvent:  "pull_request_review",
+			wantAction: "approved",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.Review.State != "approved" {
+					t.Errorf("Review.State = %q, want %q", data.Review.State, "approved")
+				}
+				if data.Review.Body != "Looks good to me!" {
+					t.Errorf("Review.Body = %q, want %q", data.Review.Body, "Looks good to me!")
+				}
+				if data.Actor.Login != "reviewer" {
+					t.Errorf("Actor.Login = %q, want %q", data.Actor.Login, "reviewer")
+				}
+			},
+		},
+		{
+			name:       "review changes_requested",
+			fixture:    "../../testdata/pull_request_review_changes_requested.json",
+			wantEvent:  "pull_request_review",
+			wantAction: "changes_requested",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.Review.State != "changes_requested" {
+					t.Errorf("Review.State = %q, want %q", data.Review.State, "changes_requested")
+				}
+				if data.Review.Body != "Please fix the tests" {
+					t.Errorf("Review.Body = %q, want %q", data.Review.Body, "Please fix the tests")
+				}
+			},
+		},
+		{
+			name:       "review commented",
+			fixture:    "../../testdata/pull_request_review_commented.json",
+			wantEvent:  "pull_request_review",
+			wantAction: "commented",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.Review.State != "commented" {
+					t.Errorf("Review.State = %q, want %q", data.Review.State, "commented")
+				}
+				if data.Review.Body != "Looks interesting, a few thoughts..." {
+					t.Errorf("Review.Body = %q, want %q", data.Review.Body, "Looks interesting, a few thoughts...")
+				}
+			},
+		},
+		{
+			name:       "review comment",
+			fixture:    "../../testdata/pull_request_review_comment.json",
+			wantEvent:  "pull_request_review_comment",
+			wantAction: "created",
+			check: func(t *testing.T, data *TemplateData) {
+				t.Helper()
+				if data.Comment.Path != "src/main.go" {
+					t.Errorf("Comment.Path = %q, want %q", data.Comment.Path, "src/main.go")
+				}
+				if data.Comment.Body != "Consider using a constant here" {
+					t.Errorf("Comment.Body = %q, want %q", data.Comment.Body, "Consider using a constant here")
+				}
+			},
+		},
 	}
 
-	data, err := Parse(payload)
-	if err != nil {
-		t.Fatalf("Parse() error: %v", err)
-	}
-
-	if data.EventName != "pull_request" {
-		t.Errorf("EventName = %q, want %q", data.EventName, "pull_request")
-	}
-	if data.Action != "opened" {
-		t.Errorf("Action = %q, want %q", data.Action, "opened")
-	}
-	if data.PR.Number != 42 {
-		t.Errorf("PR.Number = %d, want %d", data.PR.Number, 42)
-	}
-	if data.PR.Title != "Add new feature" {
-		t.Errorf("PR.Title = %q, want %q", data.PR.Title, "Add new feature")
-	}
-	if data.Actor.Login != "octocat" {
-		t.Errorf("Actor.Login = %q, want %q", data.Actor.Login, "octocat")
-	}
-	if data.Repo.FullName != "octocat/Hello-World" {
-		t.Errorf("Repo.FullName = %q, want %q", data.Repo.FullName, "octocat/Hello-World")
-	}
-	if data.PR.Head.Ref != "feature-branch" {
-		t.Errorf("PR.Head.Ref = %q, want %q", data.PR.Head.Ref, "feature-branch")
-	}
-	if data.PR.Base.Ref != "main" {
-		t.Errorf("PR.Base.Ref = %q, want %q", data.PR.Base.Ref, "main")
-	}
-}
-
-func TestParsePullRequestClosedMerged(t *testing.T) {
-	payload, err := os.ReadFile("../../testdata/pull_request_closed_merged.json")
-	if err != nil {
-		t.Fatalf("reading testdata: %v", err)
-	}
-
-	data, err := Parse(payload)
-	if err != nil {
-		t.Fatalf("Parse() error: %v", err)
-	}
-
-	if data.Action != "closed" {
-		t.Errorf("Action = %q, want %q", data.Action, "closed")
-	}
-	if !data.IsMerged() {
-		t.Error("IsMerged() = false, want true")
-	}
-}
-
-func TestParseReviewApproved(t *testing.T) {
-	payload, err := os.ReadFile("../../testdata/pull_request_review_approved.json")
-	if err != nil {
-		t.Fatalf("reading testdata: %v", err)
-	}
-
-	data, err := Parse(payload)
-	if err != nil {
-		t.Fatalf("Parse() error: %v", err)
-	}
-
-	if data.EventName != "pull_request_review" {
-		t.Errorf("EventName = %q, want %q", data.EventName, "pull_request_review")
-	}
-	if data.Action != "submitted" {
-		t.Errorf("Action = %q, want %q", data.Action, "submitted")
-	}
-	if data.Review.State != "approved" {
-		t.Errorf("Review.State = %q, want %q", data.Review.State, "approved")
-	}
-	if data.Review.Body != "Looks good to me!" {
-		t.Errorf("Review.Body = %q, want %q", data.Review.Body, "Looks good to me!")
-	}
-	if data.Actor.Login != "reviewer" {
-		t.Errorf("Actor.Login = %q, want %q", data.Actor.Login, "reviewer")
-	}
-}
-
-func TestParseReviewComment(t *testing.T) {
-	payload, err := os.ReadFile("../../testdata/pull_request_review_comment.json")
-	if err != nil {
-		t.Fatalf("reading testdata: %v", err)
-	}
-
-	data, err := Parse(payload)
-	if err != nil {
-		t.Fatalf("Parse() error: %v", err)
-	}
-
-	if data.EventName != "pull_request_review_comment" {
-		t.Errorf("EventName = %q, want %q", data.EventName, "pull_request_review_comment")
-	}
-	if data.Comment.Path != "src/main.go" {
-		t.Errorf("Comment.Path = %q, want %q", data.Comment.Path, "src/main.go")
-	}
-	if data.Comment.Body != "Consider using a constant here" {
-		t.Errorf("Comment.Body = %q, want %q", data.Comment.Body, "Consider using a constant here")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := os.ReadFile(tt.fixture)
+			if err != nil {
+				t.Fatalf("reading testdata: %v", err)
+			}
+			data, err := Parse(payload)
+			if err != nil {
+				t.Fatalf("Parse() error: %v", err)
+			}
+			if data.EventName != tt.wantEvent {
+				t.Errorf("EventName = %q, want %q", data.EventName, tt.wantEvent)
+			}
+			if data.Action != tt.wantAction {
+				t.Errorf("Action = %q, want %q", data.Action, tt.wantAction)
+			}
+			if tt.check != nil {
+				tt.check(t, data)
+			}
+		})
 	}
 }
 
@@ -169,6 +234,15 @@ func TestRelevantURL(t *testing.T) {
 			want: "https://github.com/pr/1#review-1",
 		},
 		{
+			name: "review with empty HTMLURL falls back to PR URL",
+			data: TemplateData{
+				EventName: "pull_request_review",
+				PR:        PullRequest{HTMLURL: "https://github.com/pr/1"},
+				Review:    Review{HTMLURL: ""},
+			},
+			want: "https://github.com/pr/1",
+		},
+		{
 			name: "review comment returns comment URL",
 			data: TemplateData{
 				EventName: "pull_request_review_comment",
@@ -176,6 +250,15 @@ func TestRelevantURL(t *testing.T) {
 				Comment:   Comment{HTMLURL: "https://github.com/pr/1#comment-1"},
 			},
 			want: "https://github.com/pr/1#comment-1",
+		},
+		{
+			name: "review comment with empty HTMLURL falls back to PR URL",
+			data: TemplateData{
+				EventName: "pull_request_review_comment",
+				PR:        PullRequest{HTMLURL: "https://github.com/pr/1"},
+				Comment:   Comment{HTMLURL: ""},
+			},
+			want: "https://github.com/pr/1",
 		},
 	}
 

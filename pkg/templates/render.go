@@ -10,22 +10,27 @@ import (
 
 var funcMap = template.FuncMap{
 	"truncate": func(s string, max int) string {
-		if len(s) <= max {
+		runes := []rune(s)
+		if len(runes) <= max {
 			return s
 		}
-		return s[:max] + "..."
+		return string(runes[:max]) + "..."
 	},
 }
 
 // Render executes a template against the given data.
 // If customTpl is non-empty, it is used as the template string.
 // Otherwise, a default template is selected based on event type and action.
+//
+// Note: html/template applies URL-context escaping inside href attributes.
+// GitHub URLs are clean ASCII so this is safe for default templates.
+// Custom templates with arbitrary URLs containing query params may see URL mangling.
 func Render(data *events.TemplateData, customTpl string) (string, error) {
 	tplStr := customTpl
 	if tplStr == "" {
 		tplStr = selectDefault(data)
 		if tplStr == "" {
-			return "", fmt.Errorf("no template for event %s action %s", data.EventName, data.Action)
+			return "", fmt.Errorf("no template for event %s action %q", data.EventName, data.Action)
 		}
 	}
 
@@ -48,9 +53,5 @@ func selectDefault(data *events.TemplateData) string {
 	}
 
 	key := data.EventName + ":" + data.Action
-	if data.EventName == "pull_request_review" && data.Action == "submitted" {
-		key = data.EventName + ":" + data.Review.State
-	}
-
 	return defaultTemplates[key]
 }
