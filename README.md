@@ -9,7 +9,7 @@ A GitHub Action that sends Telegram notifications for Pull Request events. Built
 - Review comment notifications
 - Customizable message templates using Go `html/template` syntax
 - Telegram forum/topic support
-- Inline keyboard button linking to the PR/review/comment
+- Inline keyboard buttons linking to the PR/review/comment and linked issues
 - Minimal Docker image (distroless)
 
 ![](./telegram-pr-notify.png)
@@ -41,6 +41,19 @@ A GitHub Action that sends Telegram notifications for Pull Request events. Built
 >     bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 >     chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 > ```
+
+## Linked Issue Buttons
+
+When a PR body contains issue references using GitHub closing keywords or `refs`, the notification includes an extra inline button for each linked issue:
+
+| Keyword | Example |
+|---------|---------|
+| `close`, `closes`, `closed` | `Closes #42` |
+| `fix`, `fixes`, `fixed` | `Fixes #7` |
+| `resolve`, `resolves`, `resolved` | `Resolves #15` |
+| `ref`, `refs` | `Refs #113` |
+
+The colon variant is also supported (e.g., `Closes: #10`). Only same-repo references (`#N`) are detected.
 
 ## Usage Examples
 
